@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets / environment
+.env
+.env.*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Claude local context / settings
+CLAUDE.md
+.claude/
+
+# Notebooks are generated from their paired .py scripts
+*.ipynb
+.ipynb_checkpoints/
+
+# Figures and saved fields written by the examples
+output/
+*.npy
+*.npz

@@ -1,0 +1,28 @@
+[project]
+name = "wavesimpro-examples"
+version = "0.1.0"
+description = "Advanced examples for the wavesimpro client: metalenses, scattering, photonic crystals, image sensors, inspection, fibers and integrated photonics"
+readme = "README.md"
+requires-python = ">=3.11, <4.0"
+license = "LGPL-2.1-only"
+license-files = ["LICENSE"]
+
+# Installs no package: only the dependencies the examples import. The helpers (wsutils) come
+# from the starter kit's GitHub tag; bump the tag here when a newer wsutils is needed.
+dependencies = [
+    "wavesimpro",
+    "wavesimpro-starter-kit @ git+https://github.com/RayFos-Ltd/wavesimpro-starter-kit@v0.2.1",
+    "numpy",
+    "scipy>=1.15.0,<2.0.0",
+    "matplotlib>=3.0",
+]
+
+[project.optional-dependencies]
+notebooks = ["jupytext", "jupyter"]   # pip install -e .[notebooks]: the .ipynb twins of the examples
+
+[build-system]
+requires = ["setuptools>=77"]  # >=77 for PEP 639 SPDX `license` / `license-files`
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

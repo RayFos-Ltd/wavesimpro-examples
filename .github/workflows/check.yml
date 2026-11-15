@@ -1,0 +1,35 @@
+name: check
+
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install . jupytext
+
+      - name: Every script compiles
+        run: python -m compileall -q -x '/output/' .
+
+      - name: Every example is a Jupytext percent pair
+        run: |
+          for f in */*/*.py; do
+            grep -q "formats: ipynb,py:percent" "$f" || { echo "$f: not paired as py:percent"; exit 1; }
+            jupytext --to notebook --test "$f" || exit 1
+          done
+
+      # Builds each geometry, its sources and preview figures, and stops before the solve:
+      # no cloud call and no credentials needed.
+      - name: Dry runs
+        run: |
+          for f in $(grep -l "^DRY_RUN = " */*/*.py); do
+            echo "::group::$f"
+            python tools/dry_run.py "$f" || exit 1
+            echo "::endgroup::"
+          done
