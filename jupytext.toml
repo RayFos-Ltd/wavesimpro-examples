@@ -1,0 +1,2 @@
+# Keep the kernelspec and the Jupytext version out of the .py headers.
+notebook_metadata_filter = "-kernelspec,-jupytext.text_representation.jupytext_version"

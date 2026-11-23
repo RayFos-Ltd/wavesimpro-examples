@@ -1,20 +1,20 @@
 # Working on the examples
 
-For whoever edits or adds an example. Readers who only run the notebooks need the README.
+For whoever edits or adds an example. Readers who only run the examples need the README.
 
 ## The pair
-Each example is a `.py` in Jupytext percent format plus a generated `.ipynb`. The `.py` is the
-source: it is what gets reviewed and committed, and it runs as a plain script. The `.ipynb` is
-git-ignored and made on demand:
+Each example is a `.py` in Jupytext percent format plus its executed `.ipynb`. The `.py` is the
+source: edit it, not the notebook; it is what gets reviewed, and it runs as a plain script.
+After editing, bring the notebook up to date:
 
 ```bash
 pip install -e .[notebooks]       # once, from the repository root: wsutils, Jupytext, Jupyter
-jupytext --sync <name>.py         # creates or refreshes <name>.ipynb next to it
+jupytext --sync <name>.py         # updates <name>.ipynb from the edited .py
 ```
 
-Edit whichever side you like, then run the same `jupytext --sync` again: it updates the older
-file from the newer one and keeps the outputs of every code cell whose text did not change, so
-a wording fix never costs a re-solve. A file that is not paired yet gets its header with
+`jupytext --sync` keeps the outputs of every code cell whose text did not change. The notebooks
+are executed once per release, so their figures render on GitHub; do not commit a re-executed
+notebook outside a release. A script that is not paired yet gets its header with
 `jupytext --set-formats ipynb,py:percent <name>.py`.
 
 ## Cell conventions
@@ -25,21 +25,20 @@ a wording fix never costs a re-solve. A file that is not paired yet gets its hea
   image into a cell: attachments do not survive the `.py` side.
 
 ## Adding an example
-- One folder per example under its theme, named after the script; data files (GDS, reference
-  arrays) live beside it and are opened by bare filename, so the example runs from its folder.
-- `OUTPUT_DIR = "output"` after the imports; figures and saved fields go there.
-- For an example whose setup takes some understanding (a GDS layout, a mode launch, port
-  measurements: things the docstrings alone cannot make clear): a `DRY_RUN = False` switch
-  near the top. With it `True` the example builds its medium, sources and monitors, prints
-  its audit and writes its preview figures, then stops before the solve, so a reader can see
-  what the setup produces before following the physics. `python tools/dry_run.py <path to
-  the .py>` runs it that way. A short example that is clear from its text does not need one.
+- One folder per example under its theme, named after the script; data files live beside it.
+- After the imports:
+  ```python
+  NAME = "<name>"                  # the file stem
+  OUTPUT_DIR = output_dir(NAME)    # from wsutils: <repo root>/output/<NAME>
+  ```
+  Name the run on the service after it: `configure(description=NAME)` for `simulate`,
+  `Setup(name=NAME)` for `submit`. An example that submits several solves through `submit`
+  places them in a Studio folder named `NAME`. Save at least one figure to `OUTPUT_DIR`.
 - Helpers come from `wsutils`, the `wavesimpro` client and the scientific Python stack; an
   example imports nothing from outside its own folder.
-- Add a row to the README's table for its theme.
+- Add a row to the README's table for its theme and to its size table, and add the example to
+  the feature table where it applies.
 
-## Executing
-A solve costs cloud time. Nothing executes notebooks automatically; CI only compiles the
-scripts, checks that each `.py` is valid Jupytext, and runs the dry-run switch. Executed
-notebooks are produced by hand when an example is published, and are shipped as release assets,
-not committed.
+## Checks
+CI compiles the scripts, checks that each `.py` is a valid Jupytext percent pair and that it
+sets `NAME` to its file stem. It never runs a solve.

@@ -10,8 +10,8 @@ license-files = ["LICENSE"]
 # Installs no package: only the dependencies the examples import. The helpers (wsutils) come
 # from the starter kit's GitHub tag; bump the tag here when a newer wsutils is needed.
 dependencies = [
-    "wavesimpro",
-    "wavesimpro-starter-kit @ git+https://github.com/RayFos-Ltd/wavesimpro-starter-kit@v0.2.1",
+    "wavesimpro>=1.28.0",
+    "wavesimpro-starter-kit @ git+https://github.com/RayFos-Ltd/wavesimpro-starter-kit@v1.0.0",
     "numpy",
     "scipy>=1.15.0,<2.0.0",
     "matplotlib>=3.0",

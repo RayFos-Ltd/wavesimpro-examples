@@ -24,12 +24,9 @@ jobs:
             jupytext --to notebook --test "$f" || exit 1
           done
 
-      # Builds each geometry, its sources and preview figures, and stops before the solve:
-      # no cloud call and no credentials needed.
-      - name: Dry runs
+      - name: Every example sets NAME to its file stem
         run: |
-          for f in $(grep -l "^DRY_RUN = " */*/*.py); do
-            echo "::group::$f"
-            python tools/dry_run.py "$f" || exit 1
-            echo "::endgroup::"
+          for f in */*/*.py; do
+            n=$(basename "$f" .py)
+            grep -Eq "^NAME = \"$n\"( |$)" "$f" || { echo "$f: missing NAME = \"$n\""; exit 1; }
           done

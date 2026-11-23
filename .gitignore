@@ -25,8 +25,7 @@ env/
 CLAUDE.md
 .claude/
 
-# Notebooks are generated from their paired .py scripts
-*.ipynb
+# Jupyter
 .ipynb_checkpoints/
 
 # Figures and saved fields written by the examples
