@@ -30,6 +30,11 @@
 # simulated: the field just behind the pillars is carried to the focus with the angular
 # spectrum, which is exact in a homogeneous medium. The solved volume only has to hold the
 # lens, and its voxel count grows with the aperture squared, not with the focal length.
+# That step takes the field on the exit plane as travelling forward and staying inside the
+# plane. Light leaving the lens at steep angles and light reflected by the absorbing
+# boundary behind the plane do not, so the focusing efficiency depends on where the exit
+# plane is taken: by 1.5% between 1 and 3.5 μm here. The focal length and the spot width
+# do not change.
 #
 # Results: the pillar library, the lens layout, the field through and behind the pillars,
 # the focal cone, the focal spot against the diffraction limit, the measured focal length
@@ -74,7 +79,8 @@ diameters = np.unique(np.round(np.r_[0:0.17:0.02, 0.17:0.2151:0.005, 0.22:0.2501
 #                             the phase completes a cycle by 240 nm
 margin = 3.0                # bare substrate around the lens
 taper = 2.5                 # Tukey ramp of the source sheet, inside the margin
-boundary_width = 2.0        # absorbing boundary on every face, about 2 λ
+boundary_width = 2.0        # absorbing boundary on every face, about 2 λ to limit the size;
+#                             4 λ absorbs light at steep angles better
 
 z_src = 0.5                 # source sheet, inside the substrate
 z_inc = (0.9, 1.14)         # two planes in the substrate where the incident amplitude is read
@@ -387,7 +393,7 @@ xx, yy = np.meshgrid((np.arange(nx) - i_axis) * pixel_size, (np.arange(ny) - i_a
 spot = np.hypot(xx, yy) <= 3 * fwhm
 efficiency = focal[spot].sum() * pixel_size ** 2 / (n_substrate * np.pi * (aperture / 2) ** 2)
 print(f"Focal spot FWHM {fwhm * 1e3:.0f} nm (diffraction limit {dl_fwhm * 1e3:.0f} nm); "
-      f"focusing efficiency {efficiency:.3f}; peak intensity {focal.max():.0f} x incident")
+      f"focusing efficiency {efficiency:.2f}; peak intensity {focal.max():.0f} x incident")
 
 fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
 im = ax_a.imshow(focal.T, cmap="inferno", extent=[-transverse / 2, transverse / 2, transverse / 2, -transverse / 2])
