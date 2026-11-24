@@ -119,7 +119,7 @@ estimates it.
 | `mx_ipa_pixel` | 7 | 176 | 13.1 |
 | `mx_nand_defects` | 8 | 34.6 | 1.80 |
 | `mx_fewmode_fiber` | 5 | 74.3 | 3.87 |
-| `hmhz_pulse2d` | 5 | 0.012 | 0.0003 |
+| `hmhz_pulse2d` | 23 | 0.019 | 0.0004 |
 | `mx_grating_coupler` | 1 | 334 | 17.4 |
 | `mx_mmi_splitter` | 1 | 54.0 | 4.02 |
 | `mx_directional_coupler` | 1 | 37.2 | 1.94 |

@@ -12,15 +12,23 @@
 
 # %% [markdown]
 # # Pulse propagation in 2D (time domain from a frequency sweep)
-# It follows the pulse2d example of the MATLAB WaveSim implementation.
+# After the pulse2d example of the MATLAB WaveSim implementation.
 #
-# Simulate the time-domain propagation of a band-limited plane-wave pulse through a 2D
-# homogeneous medium. The pulse is built up from ``Nfreq`` independent frequency-domain
-# Helmholtz simulations (one per wavelength in a Gaussian-windowed spectrum). The complex
-# fields are stacked along a frequency axis and an inverse FFT recovers the field as a
-# function of time, which is then animated.
+# A plane-wave pulse (centre wavelength 1 μm, 5 fs Gaussian envelope) enters a homogeneous 2D
+# domain of 16 x 32 μm, absorbing along x and periodic along y. The time-domain field is
+# built from independent frequency-domain Helmholtz solves:
 #
-# Size: 5 solves, the largest 0.012 Mvoxel including boundaries, 0.0003 GB of memory (service estimate).
+# 1. the pulse s(t) is sampled on a time grid t_n = n dt, n = 0..N-1;
+# 2. its DFT S_k sits on the frequencies f_k = k / (N dt); every bin with |S_k| above
+#    1e-3 of the peak is solved at the vacuum wavelength c / f_k;
+# 3. u(x, t_n) = (2 / N) Re sum_k S_k conj(U_k(x)) exp(+2πi k n / N). The solver's outgoing
+#    waves go as exp(+i k x), the exp(-iωt) convention, hence conj(U_k) with numpy's
+#    exp(+iωt) inverse transform.
+#
+# Check: the |u|^2 peak, tracked over time, moves at the speed of light. The field is
+# animated as the pulse crosses the domain.
+#
+# Size: 23 solves, each 0.019 Mvoxel including boundaries, 0.0004 GB of memory (service estimate).
 
 
 # %%
@@ -28,7 +36,6 @@ import numpy as np
 from time import time
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from scipy.signal.windows import gaussian
 
 from wavesimpro import configure, simulate
 from wsutils import output_dir
@@ -38,87 +45,98 @@ OUTPUT_DIR = output_dir(NAME)   # <repo root>/output/<NAME>
 configure(description=NAME, folder=NAME)  # every solve goes in one folder
 
 # Parameters
-PPW = 4                       # points per wavelength
-wavelength = 1.0              # center wavelength in vacuum (μm)
-pixel_size = wavelength / PPW  # grid pixel size (μm)
+C_LIGHT = 0.299792458         # speed of light (μm/fs)
+WAVELENGTH = 1.0              # centre wavelength in vacuum (μm)
+PIXEL_SIZE = 0.2              # μm; 3.6 points per wavelength at the shortest solved (0.73 μm)
+N_X, N_Y = 80, 160            # 16 μm along x (absorbing), 32 μm along y (periodic)
+BOUNDARY_WIDTH = 4.0          # μm, added along x only
 
-# Size of the medium (in pixels): axis 0 = x (propagation / absorbing),
-# axis 1 = y (transverse / periodic).
-n_x = PPW * 16  # 64 pixels along the propagation direction (absorbing boundary)
-n_y = PPW * 32  # 128 pixels along the transverse direction (periodic boundary)
+# Pulse and time grid
+F0 = C_LIGHT / WAVELENGTH     # centre frequency (1/fs)
+SIGMA_T = 5.0                 # Gaussian envelope (fs)
+T_CENTER = 20.0               # envelope peak at the source (fs)
+DT = 0.5                      # time step (fs)
+N_T = 200                     # record of 100 fs; the pulse crosses 16 μm in 53 fs
+KEEP = 1e-3                   # solve the bins with |S_k| above this fraction of the peak
 
-# Homogeneous medium: refractive index 1 everywhere -> permittivity = 1
-permittivity = np.ones((n_x, n_y, 1), dtype=np.complex64)
+t = np.arange(N_T) * DT
+pulse = np.exp(-(t - T_CENTER) ** 2 / (2 * SIGMA_T ** 2)) * np.cos(2 * np.pi * F0 * (t - T_CENTER))
+spectrum = np.fft.fft(pulse)
+freqs = np.arange(N_T) / (N_T * DT)
+bins = np.nonzero((freqs > 0) & (freqs < 0.5 / DT)
+                  & (np.abs(spectrum) > KEEP * np.abs(spectrum).max()))[0]
+f_solve = freqs[bins]
+print(f"Record {N_T * DT:.0f} fs at dt = {DT} fs; {len(bins)} solves, wavelengths "
+      f"{C_LIGHT / f_solve[-1]:.2f}-{C_LIGHT / f_solve[0]:.2f} um")
 
-# Source spectrum: a band of frequencies (0.8-1.2 um) with a Gaussian envelope.
-Nfreq = 5                                          # number of independent frequencies simulated
-lambda_set = np.linspace(0.8, 1.2, Nfreq) * wavelength  # source bandwidth (μm)
-source_spectrum = gaussian(Nfreq, (Nfreq - 1) / (2 * 4))  # Gaussian window, sigma = (Nfreq - 1) / 8
+# %%
+# Homogeneous medium (vacuum) and a unit plane-wave sheet at the x-entry plane (x = 0).
+permittivity = np.ones((N_X, N_Y, 1), dtype=np.complex64)
+source_values = np.ones((1, N_Y, 1), dtype=np.complex64)
+source_position = [0, 0, 0]  # in pixels
 
-# Run a wavesim simulation for every source frequency and store the resulting field.
-E_set = np.zeros((n_x, n_y, Nfreq), dtype=np.complex64)
+# One solve per frequency bin; periodic in y (and the singleton z), absorbing in x.
+fields = np.zeros((len(bins), N_X, N_Y), dtype=np.complex64)
+total_iterations = 0
 start = time()
-for f in range(Nfreq):
-    print(f"Simulation: {f + 1}/{Nfreq}")
-
-    # Plane wave spanning the full transverse (y) extent at the x-entry plane (x = 0),
-    # scaled by the spectral amplitude for this frequency.
-    source_values = np.full((1, n_y, 1), source_spectrum[f], dtype=np.complex64)
-    source_position = [0, 0, 0]  # entry plane, in pixels
-
-    # Periodic in y (and the singleton z), absorbing in x.
+for k, f in enumerate(f_solve):
+    print(f"Simulation: {k + 1}/{len(bins)}, wavelength {C_LIGHT / f:.3f} um")
     u, iterations, residual_norm = simulate(
         permittivity=permittivity,
         sources=[(source_values, source_position)],
-        wavelength=lambda_set[f],
-        pixel_size=pixel_size,
-        boundary_width=4.0,                 # μm (= 4*PPW = 16 px), added in x only
+        wavelength=C_LIGHT / f,
+        pixel_size=PIXEL_SIZE,
+        boundary_width=BOUNDARY_WIDTH,
         periodic=(False, True, True),
     )
-    E_set[:, :, f] = u  # u is a host numpy array of shape (n_x, n_y)
-print(f"Total simulation time: {time() - start:.2f} s")
+    fields[k] = u  # u is a host numpy array of shape (N_X, N_Y)
+    total_iterations += iterations
+print(f"Total simulation time: {time() - start:.2f} s, {total_iterations} iterations")
 
-# Field in the time domain: inverse Fourier transform E(frequency) -> E(time).
-E_time = np.fft.ifftshift(np.fft.ifft(E_set, n=Nfreq, axis=2), axes=2)
+# %%
+# Field in the time domain: weight each solve by the pulse spectrum and sum the bins.
+weighted = np.conj(fields) * spectrum[bins, None, None].astype(np.complex64)
 
-# Axes (in μm; with wavelength = 1 μm these equal x/λ and y/λ).
-x = np.arange(1, n_x + 1) * pixel_size
-y = np.arange(-n_y // 2 + 1, n_y // 2 + 1) * pixel_size
 
-# Time axis from the frequency spacing: f = c*k0 [Hz].
-c = 3e8
-freq = c * 2 * np.pi / (lambda_set * 1e-6)
-t_set = np.arange(-Nfreq // 2 + 1, Nfreq // 2 + 1) * (1.0 / (2 * (freq[0] - freq[1])))
+def synthesize(n):
+    """u(x, y, t_n) for the time indices n: (2 / N) Re sum_k W_k exp(+2πi k n / N)."""
+    phase = np.exp(2j * np.pi * np.outer(np.atleast_1d(n), bins) / N_T)
+    return (2.0 / N_T) * np.real(phase @ weighted.reshape(len(bins), -1)).reshape((-1, N_X, N_Y))
 
-# Keep only positive times.
-keep = t_set >= 0
-E_time = E_time[:, :, keep]
-t_set = t_set[keep] * 1e15  # → fs
 
-# Animate the intensity |E(t)|^2 over time.
-intensity = np.abs(E_time) ** 2
-Imax = intensity.max()
-n_frames = intensity.shape[2]
+# Speed check: x of the |u|^2 peak (the field is uniform in y) while the pulse is inside.
+check_n = np.arange(int(30 / DT), int(65 / DT), int(5 / DT))
+x_peak = (synthesize(check_n) ** 2).mean(axis=2).argmax(axis=1) * PIXEL_SIZE
+speed = np.polyfit(check_n * DT, x_peak, 1)[0]
+print("Pulse peak x (um): " + ", ".join(f"{n * DT:.0f} fs: {x:.1f}" for n, x in zip(check_n, x_peak)))
+print(f"Pulse speed {speed:.4f} um/fs, c = {C_LIGHT:.4f} um/fs ({100 * (speed / C_LIGHT - 1):+.1f} %)")
+
+# %%
+# Animate the field every 1 fs while the pulse crosses the domain.
+frames_n = np.arange(int(10 / DT), int(80 / DT) + 1, int(1 / DT))
+frames = synthesize(frames_n)
+t_frames = frames_n * DT
+vmax = np.abs(frames).max()
 
 fig, ax = plt.subplots()
-extent = [0, n_x * pixel_size, y.min(), y.max()]
+extent = [0, N_X * PIXEL_SIZE, -N_Y * PIXEL_SIZE / 2, N_Y * PIXEL_SIZE / 2]
 # .T puts x on the horizontal axis and y on the vertical axis.
-im = ax.imshow(intensity[:, :, 0].T, extent=extent, origin='lower',
-               vmin=0, vmax=Imax, cmap='inferno', aspect='auto')
-ax.set_xlabel(r"$x / \lambda$", fontsize=14)
-ax.set_ylabel(r"$y / \lambda$", fontsize=14)
-title = ax.set_title(f"t = {t_set[0]:.1f} fs")
+im = ax.imshow(frames[0].T, extent=extent, origin='lower',
+               vmin=-vmax, vmax=vmax, cmap='RdBu_r', aspect='auto')
+ax.set_xlabel(r"$x$ (μm)", fontsize=14)
+ax.set_ylabel(r"$y$ (μm)", fontsize=14)
+title = ax.set_title(f"t = {t_frames[0]:.1f} fs")
 cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-cbar.ax.set_title(r"$|E|^2$")
+cbar.ax.set_title(r"$u$")
 
 
 def update(frame):
-    im.set_data(intensity[:, :, frame].T)
-    title.set_text(f"t = {t_set[frame]:.1f} fs")
+    im.set_data(frames[frame].T)
+    title.set_text(f"t = {t_frames[frame]:.1f} fs")
     return im, title
 
 
-anim = animation.FuncAnimation(fig, update, frames=n_frames, interval=100, blit=False)
+anim = animation.FuncAnimation(fig, update, frames=len(frames_n), interval=100, blit=False)
 plt.tight_layout()
 
 # Save the animation as a GIF in OUTPUT_DIR.
